@@ -2,6 +2,7 @@ import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 from typing import Optional
+from datetime import datetime, timezone
 
 load_dotenv()
 
@@ -70,7 +71,8 @@ async def update_house_points(house: str, points: int, reason: str, teacher_name
         "house": house,
         "points": points,
         "reason": reason,
-        "given_by": teacher_name
+        "given_by": teacher_name,
+        "timestamp": datetime.now(timezone.utc)
     })
     
     return nuevo_total
