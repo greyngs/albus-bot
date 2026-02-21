@@ -53,3 +53,35 @@ async def register_user(telegram_id: int, name: str, house: str, profession: str
     
     await collection.insert_one(new_student)
     return True
+
+async def update_house_points(house: str, points: int, reason: str, teacher_name: str) -> int:
+    houses_col = db_manager.db["houses"]
+    await houses_col.update_one(
+        {"house": house},
+        {"$inc": {"total_points": points}},
+        upsert=True
+    )
+    
+    updated_house = await houses_col.find_one({"house": house})
+    nuevo_total = updated_house["total_points"]
+    
+    history_col = db_manager.db["points_history"]
+    await history_col.insert_one({
+        "house": house,
+        "points": points,
+        "reason": reason,
+        "given_by": teacher_name
+    })
+    
+    return nuevo_total
+
+async def get_scoreboard() -> dict:
+    houses_col = db_manager.db["houses"]
+    cursor = houses_col.find({})
+    
+    scores = {"Gryffindor": 0, "Hufflepuff": 0, "Ravenclaw": 0, "Slytherin": 0}
+    
+    async for doc in cursor:
+        scores[doc["house"]] = doc.get("total_points", 0)
+        
+    return scores
