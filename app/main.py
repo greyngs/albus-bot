@@ -31,12 +31,3 @@ async def telegram_webhook(request: Request):
     except Exception as e:
         print(f"❌ Error procesando el webhook: {e}")
         return {"status": "error", "detalle": str(e)}
-
-@app.get("/test-magia")
-async def probar_magia(
-    mensaje: str = "Profesor, mi bot de telegram ya casi esta listo", 
-    nombre: str = "Jorge", 
-    casa: str = "Hufflepuff"
-):
-    respuesta = await speak_like_dumbledore(mensaje, nombre, casa)
-    return {"Dumbledore dice": respuesta}
