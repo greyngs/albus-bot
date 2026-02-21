@@ -76,7 +76,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     response = await speak_like_dumbledore(user_text, name, house, profession)
     await update.message.reply_text(response)
 
-HOOSING_HOUSE, TYPING_POINTS, TYPING_REASON = range(3)
+CHOOSING_HOUSE, TYPING_POINTS, TYPING_REASON = range(3)
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     scores = await get_scoreboard()
