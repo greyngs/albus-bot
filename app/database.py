@@ -1,6 +1,7 @@
 import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
+from typing import Optional
 
 load_dotenv()
 
@@ -29,3 +30,24 @@ async def close_mongo_connection():
     if db_manager.client:
         db_manager.client.close()
         print("🔒 Conexión cerrada.")
+
+async def get_user(telegram_id: int) -> Optional[dict]:
+    collection = db["students"] 
+    user = await collection.find_one({"telegram_id": telegram_id})
+    return user
+
+async def register_user(telegram_id: int, name: str, house: str, profession: str) -> bool:
+    collection = db["students"]
+    existing_user = await collection.find_one({"telegram_id": telegram_id})
+    if existing_user:
+        return False
+    new_student = {
+        "telegram_id": telegram_id,
+        "name": name,
+        "house": house,
+        "profession": profession,
+        "total_points": 0  
+    }
+    
+    await collection.insert_one(new_student)
+    return True
