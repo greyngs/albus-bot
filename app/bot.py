@@ -9,6 +9,7 @@ from app.database import get_user, register_user, update_house_points, get_score
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SECRET_PASSWORD = os.getenv("SECRET_PASSWORD") 
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -175,7 +176,16 @@ telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_
 async def init_bot():
     await telegram_app.initialize()
     await telegram_app.start()
+    
+    if WEBHOOK_URL:
+        print(f"🔗 Configurando Webhook en: {WEBHOOK_URL}")
+        await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
+    else:
+        print("🔄 Iniciando bot en modo Polling (Local)...")
+        await telegram_app.updater.start_polling()
 
 async def stop_bot():
+    if telegram_app.updater and telegram_app.updater.running:
+        await telegram_app.updater.stop()
     await telegram_app.stop()
     await telegram_app.shutdown()
