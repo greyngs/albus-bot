@@ -75,7 +75,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
     
     response = await speak_like_dumbledore(user_text, name, house, profession)
-    await update.message.reply_text(response)
+    await update.message.reply_text(response, reply_to_message_id=update.message.message_id)
 
 CHOOSING_STUDENT, TYPING_POINTS, TYPING_REASON = range(3)
 
@@ -203,7 +203,10 @@ point_conv_handler = ConversationHandler(
 )
 
 telegram_app.add_handler(point_conv_handler) 
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+telegram_app.add_handler(MessageHandler(
+    filters.TEXT & ~filters.COMMAND & (filters.ChatType.PRIVATE | filters.Entity("mention")), 
+    handle_message
+))
 
 async def init_bot():
     await telegram_app.initialize()
