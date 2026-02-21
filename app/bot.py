@@ -1,10 +1,10 @@
 import os
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from dotenv import load_dotenv
 
 from app.dumbledore import speak_like_dumbledore
-from app.database import get_user, register_user 
+from app.database import get_user, register_user, update_house_points, get_scoreboard # <-- Nuevas importaciones
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -76,10 +76,100 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     response = await speak_like_dumbledore(user_text, name, house, profession)
     await update.message.reply_text(response)
 
+HOOSING_HOUSE, TYPING_POINTS, TYPING_REASON = range(3)
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    scores = await get_scoreboard()
+    board_text = "🏆 **Copa de las Casas - Marcador Actual** 🏆\n\n"
+    
+    house_emojis = {"Gryffindor": "🦁", "Hufflepuff": "🦡", "Ravenclaw": "🦅", "Slytherin": "🐍"}
+    
+    for house, points in scores.items():
+        emoji = house_emojis.get(house, "✨")
+        board_text += f"{emoji} {house}: {points} puntos\n"
+        
+    await update.message.reply_text(board_text, parse_mode="Markdown")
+
+async def point_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reply_keyboard = [["Gryffindor", "Hufflepuff"], ["Ravenclaw", "Slytherin"]]
+    
+    await update.message.reply_text(
+        "🪄 ¿A qué casa deseas otorgar (o quitar) puntos?\n\n"
+        "Elige una opción del teclado o escribe /cancel para anular el hechizo.",
+        reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+        ),
+    )
+    return CHOOSING_HOUSE
+
+async def point_house(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chosen_house = update.message.text
+    context.user_data["house"] = chosen_house
+    
+    await update.message.reply_text(
+        f"Has elegido {chosen_house}. ¿Cuántos puntos? (Escribe un número, por ejemplo: 10 o -5)",
+        reply_markup=ReplyKeyboardRemove(), 
+    )
+    return TYPING_POINTS
+
+async def point_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        points_to_add = int(update.message.text)
+        context.user_data["points"] = points_to_add
+        
+        await update.message.reply_text(
+            f"Entendido, {points_to_add} puntos para {context.user_data['house']}.\n"
+            "¿Cuál es el motivo de esta acción? (Ej: Por un excelente despliegue de código en Rust, o por salvar una vida en el hospital)"
+        )
+        return TYPING_REASON
+    except ValueError:
+        await update.message.reply_text("Por favor, escribe solo un número entero válido. Intenta de nuevo.")
+        return TYPING_POINTS
+
+async def point_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reason = update.message.text
+    house = context.user_data["house"]
+    points = context.user_data["points"]
+    telegram_id = update.message.from_user.id
+    
+    student = await get_user(telegram_id)
+    teacher_name = student["name"] if student else "Profesor Desconocido"
+
+    new_total = await update_house_points(house, points, reason, teacher_name)
+
+    await update.message.reply_text(
+        f"✨ ¡Hecho! {points} puntos para {house}.\n"
+        f"📜 Motivo: {reason}\n\n"
+        f"📊 Nuevo total de {house}: {new_total} puntos."
+    )
+    
+    context.user_data.clear() 
+    return ConversationHandler.END
+
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Encantamiento cancelado. Los relojes de arena permanecen intactos.", 
+        reply_markup=ReplyKeyboardRemove()
+    )
+    context.user_data.clear()
+    return ConversationHandler.END
 
 telegram_app.add_handler(CommandHandler("help", help_command))
 telegram_app.add_handler(CommandHandler("start", help_command))
 telegram_app.add_handler(CommandHandler("registro", register_command))
+telegram_app.add_handler(CommandHandler("status", status_command)) 
+
+point_conv_handler = ConversationHandler(
+    entry_points=[CommandHandler("point", point_start)],
+    states={
+        CHOOSING_HOUSE: [MessageHandler(filters.Regex("^(Gryffindor|Hufflepuff|Ravenclaw|Slytherin)$"), point_house)],
+        TYPING_POINTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, point_amount)],
+        TYPING_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, point_reason)],
+    },
+    fallbacks=[CommandHandler("cancel", cancel_command)],
+)
+
+telegram_app.add_handler(point_conv_handler) 
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 async def init_bot():
