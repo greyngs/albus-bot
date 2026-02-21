@@ -3,7 +3,7 @@ from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKey
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler
 from dotenv import load_dotenv
 
-from app.dumbledore import speak_like_dumbledore
+from app.dumbledore import speak_like_dumbledore, react_to_points
 from app.database import get_user, register_user, update_house_points, get_scoreboard, get_all_students
 
 load_dotenv()
@@ -160,10 +160,18 @@ async def point_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = await update_house_points(student_id, points, reason, teacher_name)
 
     if result:
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
+        dumbledore_reaction = await react_to_points(
+            student_name=result['student_name'], 
+            house=result['house'], 
+            points=points, 
+            reason=reason, 
+            teacher_name=teacher_name
+        )
+        
         await update.message.reply_text(
-            f"✨ ¡Hecho! {points} puntos para {result['student_name']}.\n"
-            f"📜 Motivo: {reason}\n\n"
-            f"📊 Nuevo total de {result['house']}: {result['new_total']} puntos."
+            f"{dumbledore_reaction}\n\n"
+            f"📊 Nuevo balance de {result['house']}: {result['new_total']} puntos."
         )
     else:
         await update.message.reply_text("Hubo un error al otorgar los puntos. Estudiante no encontrado.")

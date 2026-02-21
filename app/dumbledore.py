@@ -30,3 +30,30 @@ async def speak_like_dumbledore(user_message: str, name: str, house: str, profes
     except Exception as e:
         print(f"❌ Error conectando a Gemini: {e}")
         return "Parece que los duendecillos de Cornualles han interferido con mi red flu. Intenta de nuevo más tarde."
+
+async def react_to_points(student_name: str, house: str, points: int, reason: str, teacher_name: str) -> str:
+    action = "otorgado" if points > 0 else "quitado"
+    abs_points = abs(points)
+    
+    system_instruction = (
+        f"Eres Albus Dumbledore. El profesor o alumno '{teacher_name}' acaba de {action} {abs_points} puntos "
+        f"al estudiante '{student_name}' de la casa '{house}'. El motivo ha sido: '{reason}'. "
+        f"Reacciona a esta situación como el sabio director de Hogwarts. "
+        f"Si es una pérdida de puntos, muéstrate decepcionado, comprensivo o da una lección moral. "
+        f"Si es una ganancia, muéstrate orgulloso, alegre o intrigado. "
+        f"Sé conciso (máximo 300 caracteres). Nunca rompas tu personaje ni hables como un bot."
+    )
+
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents="¿Qué opinas sobre estos puntos que se acaban de dar en Hogwarts, Director?",
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.8,
+            )
+        )
+        return response.text
+    except Exception as e:
+        print(f"❌ Error conectando a Gemini (Puntos): {e}")
+        return f"✨ ¡Hecho! {points} puntos contabilizados para {student_name} ({house})."
