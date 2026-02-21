@@ -4,7 +4,10 @@ from google.genai import types
 
 client = genai.Client()
 
-async def speak_like_dumbledore(user_message: str, name: str, house: str, profession: str) -> str:
+# Diccionario en memoria para guardar las sesiones de chat por usuario
+user_chats = {}
+
+async def speak_like_dumbledore(user_message: str, telegram_id: int, name: str, house: str, profession: str) -> str:
     system_instruction = (
         f"Eres Albus Dumbledore, el sabio y benévolo director de Hogwarts. "
         f"Estás hablando con {name}, un estudiante de la casa {house}. "
@@ -18,14 +21,22 @@ async def speak_like_dumbledore(user_message: str, name: str, house: str, profes
     )
 
     try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=user_message,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.7,
+        if telegram_id not in user_chats:
+            user_chats[telegram_id] = client.chats.create(
+                model='gemini-2.5-flash',
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.7,
+                )
             )
-        )
+            
+        chat = user_chats[telegram_id]
+                
+        if len(chat.get_history()) > 14:
+            history = chat.get_history()
+            chat.history = history[-14:]
+            
+        response = chat.send_message(user_message)
         return response.text
     except Exception as e:
         print(f"❌ Error conectando a Gemini: {e}")

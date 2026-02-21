@@ -74,7 +74,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
     
-    response = await speak_like_dumbledore(user_text, name, house, profession)
+    response = await speak_like_dumbledore(user_text, telegram_id, name, house, profession)
     await update.message.reply_text(response, reply_to_message_id=update.message.message_id)
 
 CHOOSING_STUDENT, TYPING_POINTS, TYPING_REASON = range(3)
