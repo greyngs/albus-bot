@@ -32,15 +32,17 @@ async def close_mongo_connection():
         print("🔒 Conexión cerrada.")
 
 async def get_user(telegram_id: int) -> Optional[dict]:
-    collection = db["students"] 
+    collection = db_manager.db["students"] 
     user = await collection.find_one({"telegram_id": telegram_id})
     return user
 
 async def register_user(telegram_id: int, name: str, house: str, profession: str) -> bool:
-    collection = db["students"]
+    collection = db_manager.db["students"]
+    
     existing_user = await collection.find_one({"telegram_id": telegram_id})
     if existing_user:
         return False
+        
     new_student = {
         "telegram_id": telegram_id,
         "name": name,
