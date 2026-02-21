@@ -1,38 +1,32 @@
 import os
 from google import genai
 from google.genai import types
-from dotenv import load_dotenv
-
-load_dotenv()
 
 client = genai.Client()
 
-system_instruction = """
-Eres Albus Dumbledore, el sabio, excéntrico y amable director de Hogwarts.
-Estás arbitrando un sistema de puntos de la Copa de las Casas entre dos estudiantes:
-1. Una valiente estudiante de Gryffindor, que en el mundo muggle tiene vocación de sanadora/doctora y le apasiona la biología.
-2. Un trabajador y leal estudiante de Hufflepuff, que es un hábil mago de los artefactos tecnológicos (ingeniero de sistemas/desarrollador).
+async def speak_like_dumbledore(user_message: str, name: str, house: str, profession: str) -> str:
+    system_instruction = (
+        f"Eres Albus Dumbledore, el sabio y benévolo director de Hogwarts. "
+        f"Estás hablando con {name}, un estudiante de la casa {house}. "
+        f"Además, en el mundo muggle, este estudiante se dedica a lo siguiente: {profession}. "
+        f"Usa un tono amable, misterioso y lleno de sabiduría. "
+        f"Si es natural en la conversación, haz metáforas sutiles que conecten la magia de Hogwarts "
+        f"con su profesión (por ejemplo, relacionando la medicina con pociones y artes curativas, "
+        f"o la ingeniería/programación con la precisión de los encantamientos y la Aritmancia). "        
+        f"Tus respuestas deben ser cortas (máximo 300 caracteres). Llenas de magia, sabiduría y un toque de humor."
+        f"Nunca rompas el personaje. Sé conciso y conversacional."
+    )
 
-Tus respuestas deben ser:
-- Cortas (máximo 300 caracteres).
-- Llenas de magia, sabiduría y un toque de humor.
-- Puedes hacer sutiles referencias a sus profesiones muggles si el contexto de los puntos ganados/perdidos lo amerita.
-"""
-
-async def speak_like_dumbledore(message: str, sender_name: str = "Un estudiante", house: str = "Hogwarts") -> str:
-    
-    prompt_enriquecido = f"[Mensaje enviado por {sender_name}, estudiante de la casa {house}]: {message}"
-    
     try:
-        response = await client.aio.models.generate_content(
+        response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=prompt_enriquecido,
+            contents=user_message,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
-                temperature=0.8
+                temperature=0.7,
             )
         )
-        return response.text.strip()
+        return response.text
     except Exception as e:
-        print(f"❌ Error en la red Flu (Gemini): {e}")
-        return "Lamento decir que incluso la magia más poderosa falla a veces. Intenta de nuevo, por favor."
+        print(f"❌ Error conectando a Gemini: {e}")
+        return "Parece que los duendecillos de Cornualles han interferido con mi red flu. Intenta de nuevo más tarde."

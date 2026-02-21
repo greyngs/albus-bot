@@ -73,9 +73,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
     
-    enriched_context = f"(Soy {name}, de {house}. Mi profesión es {profession}). {user_text}"
-    
-    response = await speak_like_dumbledore(enriched_context, name, house)
+    response = await speak_like_dumbledore(user_text, name, house, profession)
     await update.message.reply_text(response)
 
 
