@@ -21,8 +21,8 @@ Soy Albus Dumbledore. El Gran Comedor está listo para recibir sus méritos.
 📋 **Encantamientos disponibles:**
 /help - Muestra este mensaje
 /registro - Inscribirte en los pergaminos de Hogwarts
-/point - Agregar o quitar puntos a una casa (Próximamente)
-/status - Ver el estado actual de puntos (Próximamente)
+/point - Agregar o quitar puntos a una casa
+/status - Ver el estado actual de puntos
     """
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
@@ -119,7 +119,7 @@ async def point_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_text(
             f"Entendido, {points_to_add} puntos para {context.user_data['house']}.\n"
-            "¿Cuál es el motivo de esta acción? (Ej: Por un excelente despliegue de código en Rust, o por salvar una vida en el hospital)"
+            "¿Cuál es el motivo de esta hazaña o travesura? (Ej: Por un encantamiento bien ejecutado, o por mostrar gran valentía)"
         )
         return TYPING_REASON
     except ValueError:
