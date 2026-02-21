@@ -1,10 +1,10 @@
 import os
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler
 from dotenv import load_dotenv
 
 from app.dumbledore import speak_like_dumbledore
-from app.database import get_user, register_user, update_house_points, get_scoreboard # <-- Nuevas importaciones
+from app.database import get_user, register_user, update_house_points, get_scoreboard, get_all_students
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -77,7 +77,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     response = await speak_like_dumbledore(user_text, name, house, profession)
     await update.message.reply_text(response)
 
-CHOOSING_HOUSE, TYPING_POINTS, TYPING_REASON = range(3)
+CHOOSING_STUDENT, TYPING_POINTS, TYPING_REASON = range(3)
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     scores = await get_scoreboard()
@@ -92,24 +92,45 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(board_text, parse_mode="Markdown")
 
 async def point_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reply_keyboard = [["Gryffindor", "Hufflepuff"], ["Ravenclaw", "Slytherin"]]
+    students = await get_all_students()
     
-    await update.message.reply_text(
-        "🪄 ¿A qué casa deseas otorgar (o quitar) puntos?\n\n"
-        "Elige una opción del teclado o escribe /cancel para anular el hechizo.",
-        reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
-        ),
-    )
-    return CHOOSING_HOUSE
+    if not students:
+        await update.message.reply_text("Aún no hay estudiantes registrados en Hogwarts.")
+        return ConversationHandler.END
 
-async def point_house(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chosen_house = update.message.text
-    context.user_data["house"] = chosen_house
-    
+    keyboard = []
+    # Crear filas de botones con 2 estudiantes por fila si es posible
+    for i in range(0, len(students), 2):
+        row = []
+        for student in students[i:i+2]:
+            house_emoji = {"Gryffindor": "🦁", "Hufflepuff": "🦡", "Ravenclaw": "🦅", "Slytherin": "🐍"}.get(student['house'], "✨")
+            button_text = f"{house_emoji} {student['name']}"
+            # Convertir id a string para callback_data
+            row.append(InlineKeyboardButton(button_text, callback_data=str(student['telegram_id'])))
+        keyboard.append(row)
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     await update.message.reply_text(
-        f"Has elegido {chosen_house}. ¿Cuántos puntos? (Escribe un número, por ejemplo: 10 o -5)",
-        reply_markup=ReplyKeyboardRemove(), 
+        "🪄 ¿A qué estudiante deseas otorgar (o quitar) puntos?\n\n"
+        "Selecciona un nombre de la lista, o escribe /cancel para anular el hechizo.",
+        reply_markup=reply_markup
+    )
+    return CHOOSING_STUDENT
+
+async def point_student_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer() # Necesario para q el boton deje de cargar en UI
+    
+    student_id = int(query.data)
+    context.user_data["student_id"] = student_id
+    
+    # Buscamos el nombre para mostrarlo amistosamente
+    students = await get_all_students()
+    student_name = next((s["name"] for s in students if s["telegram_id"] == student_id), "Estudiante Desconocido")
+    
+    await query.edit_message_text(
+        f"Has elegido a {student_name}. ¿Cuántos puntos? (Escribe un número, por ejemplo: 10 o -5)"
     )
     return TYPING_POINTS
 
@@ -119,8 +140,8 @@ async def point_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["points"] = points_to_add
         
         await update.message.reply_text(
-            f"Entendido, {points_to_add} puntos para {context.user_data['house']}.\n"
-            "¿Cuál es el motivo de esta hazaña o travesura? (Ej: Por un encantamiento bien ejecutado, o por mostrar gran valentía)"
+            f"Entendido, {points_to_add} puntos.\n"
+            "¿Cuál es el motivo de esta hazaña o travesura? (Ej: Por un encantamiento bien ejecutado)"
         )
         return TYPING_REASON
     except ValueError:
@@ -129,20 +150,23 @@ async def point_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def point_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reason = update.message.text
-    house = context.user_data["house"]
+    student_id = context.user_data["student_id"]
     points = context.user_data["points"]
-    telegram_id = update.message.from_user.id
     
-    student = await get_user(telegram_id)
+    teacher_id = update.message.from_user.id
+    student = await get_user(teacher_id)
     teacher_name = student["name"] if student else "Profesor Desconocido"
 
-    new_total = await update_house_points(house, points, reason, teacher_name)
+    result = await update_house_points(student_id, points, reason, teacher_name)
 
-    await update.message.reply_text(
-        f"✨ ¡Hecho! {points} puntos para {house}.\n"
-        f"📜 Motivo: {reason}\n\n"
-        f"📊 Nuevo total de {house}: {new_total} puntos."
-    )
+    if result:
+        await update.message.reply_text(
+            f"✨ ¡Hecho! {points} puntos para {result['student_name']}.\n"
+            f"📜 Motivo: {reason}\n\n"
+            f"📊 Nuevo total de {result['house']}: {result['new_total']} puntos."
+        )
+    else:
+        await update.message.reply_text("Hubo un error al otorgar los puntos. Estudiante no encontrado.")
     
     context.user_data.clear() 
     return ConversationHandler.END
@@ -163,7 +187,7 @@ telegram_app.add_handler(CommandHandler("status", status_command))
 point_conv_handler = ConversationHandler(
     entry_points=[CommandHandler("point", point_start)],
     states={
-        CHOOSING_HOUSE: [MessageHandler(filters.Regex("^(Gryffindor|Hufflepuff|Ravenclaw|Slytherin)$"), point_house)],
+        CHOOSING_STUDENT: [CallbackQueryHandler(point_student_callback)],
         TYPING_POINTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, point_amount)],
         TYPING_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, point_reason)],
     },

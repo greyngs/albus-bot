@@ -37,6 +37,11 @@ async def get_user(telegram_id: int) -> Optional[dict]:
     user = await collection.find_one({"telegram_id": telegram_id})
     return user
 
+async def get_all_students() -> list[dict]:
+    collection = db_manager.db["students"]
+    cursor = collection.find({})
+    return await cursor.to_list(length=None)
+
 async def register_user(telegram_id: int, name: str, house: str, profession: str) -> bool:
     collection = db_manager.db["students"]
     
@@ -55,7 +60,23 @@ async def register_user(telegram_id: int, name: str, house: str, profession: str
     await collection.insert_one(new_student)
     return True
 
-async def update_house_points(house: str, points: int, reason: str, teacher_name: str) -> int:
+async def update_house_points(student_id: int, points: int, reason: str, teacher_name: str) -> dict:
+    students_col = db_manager.db["students"]
+    student = await students_col.find_one({"telegram_id": student_id})
+    
+    if not student:
+        return None
+        
+    house = student["house"]
+    student_name = student["name"]
+
+    # 1. Update Student Points
+    await students_col.update_one(
+        {"telegram_id": student_id},
+        {"$inc": {"total_points": points}}
+    )
+
+    # 2. Update House Points
     houses_col = db_manager.db["houses"]
     await houses_col.update_one(
         {"house": house},
@@ -66,8 +87,11 @@ async def update_house_points(house: str, points: int, reason: str, teacher_name
     updated_house = await houses_col.find_one({"house": house})
     nuevo_total = updated_house["total_points"]
     
+    # 3. Add History Record
     history_col = db_manager.db["points_history"]
     await history_col.insert_one({
+        "student_id": student_id,
+        "student_name": student_name,
         "house": house,
         "points": points,
         "reason": reason,
@@ -75,7 +99,7 @@ async def update_house_points(house: str, points: int, reason: str, teacher_name
         "timestamp": datetime.now(timezone.utc)
     })
     
-    return nuevo_total
+    return {"house": house, "new_total": nuevo_total, "student_name": student_name}
 
 async def get_scoreboard() -> dict:
     houses_col = db_manager.db["houses"]
