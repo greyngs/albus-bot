@@ -3,7 +3,7 @@ from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKey
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler
 from dotenv import load_dotenv
 
-from app.dumbledore import speak_like_dumbledore, react_to_points
+from app.dumbledore import speak_like_dumbledore, evaluate_and_react
 from app.database import get_user, register_user, update_house_points, get_scoreboard, get_all_students
 
 load_dotenv()
@@ -77,7 +77,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     response = await speak_like_dumbledore(user_text, telegram_id, name, house, profession)
     await update.message.reply_text(response, reply_to_message_id=update.message.message_id)
 
-CHOOSING_STUDENT, TYPING_POINTS, TYPING_REASON = range(3)
+CHOOSING_STUDENT, CHOOSING_SCALE, TYPING_REASON = range(3)
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     scores = await get_scoreboard()
@@ -120,61 +120,92 @@ async def point_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def point_student_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer() # Necesario para q el boton deje de cargar en UI
+    await query.answer() 
     
     student_id = int(query.data)
     context.user_data["student_id"] = student_id
     
-    # Buscamos el nombre para mostrarlo amistosamente
     students = await get_all_students()
     student_name = next((s["name"] for s in students if s["telegram_id"] == student_id), "Estudiante Desconocido")
     
+    keyboard = [
+        [InlineKeyboardButton("🟢 Buena - Normal (5 a 10)", callback_data="buena_normal")],
+        [InlineKeyboardButton("🌟 Buena - Extraordinaria (11 a 30)", callback_data="buena_extraordinaria")],
+        [InlineKeyboardButton("🔥 Buena - Épica (31+)", callback_data="buena_epica")],
+        [InlineKeyboardButton("🔴 Mala - Normal (-1 a -10)", callback_data="mala_normal")],
+        [InlineKeyboardButton("⚠️ Mala - Extraordinaria (-11 a -30)", callback_data="mala_extraordinaria")],
+        [InlineKeyboardButton("💥 Mala - Épica (-31+)", callback_data="mala_epica")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await query.edit_message_text(
-        f"Has elegido a {student_name}. ¿Cuántos puntos? (Escribe un número, por ejemplo: 10 o -5)"
+        f"Has elegido a {student_name}.\n¿De qué magnitud fue su acción?",
+        reply_markup=reply_markup
     )
-    return TYPING_POINTS
+    return CHOOSING_SCALE
 
-async def point_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        points_to_add = int(update.message.text)
-        context.user_data["points"] = points_to_add
-        
-        await update.message.reply_text(
-            f"Entendido, {points_to_add} puntos.\n"
-            "¿Cuál es el motivo de esta hazaña o travesura? (Ej: Por un encantamiento bien ejecutado)"
-        )
-        return TYPING_REASON
-    except ValueError:
-        await update.message.reply_text("Por favor, escribe solo un número entero válido. Intenta de nuevo.")
-        return TYPING_POINTS
+async def point_scale_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    scale = query.data
+    context.user_data["scale"] = scale
+    
+    scale_names = {
+        "buena_normal": "Buena (Normal)",
+        "buena_extraordinaria": "Buena (Extraordinaria)",
+        "buena_epica": "Buena (Épica)",
+        "mala_normal": "Mala (Normal)",
+        "mala_extraordinaria": "Mala (Extraordinaria)",
+        "mala_epica": "Mala (Épica)"
+    }
+    
+    await query.edit_message_text(
+        f"Magnitud elegida: {scale_names.get(scale, 'Desconocida')}.\n"
+        "¿Cuál es el motivo de esta hazaña o travesura? Albus Dumbledore decidirá los puntos exactos..."
+    )
+    return TYPING_REASON
 
 async def point_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reason = update.message.text
     student_id = context.user_data["student_id"]
-    points = context.user_data["points"]
+    scale = context.user_data["scale"]
     
     teacher_id = update.message.from_user.id
     student = await get_user(teacher_id)
     teacher_name = student["name"] if student else "Profesor Desconocido"
 
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
+
+    students = await get_all_students()
+    target_student = next((s for s in students if s["telegram_id"] == student_id), None)
+    
+    if not target_student:
+        await update.message.reply_text("Hubo un error al otorgar los puntos. Estudiante no encontrado.")
+        context.user_data.clear() 
+        return ConversationHandler.END
+
+    evaluation = await evaluate_and_react(
+        student_name=target_student['name'], 
+        house=target_student['house'], 
+        scale=scale, 
+        reason=reason, 
+        teacher_name=teacher_name
+    )
+    
+    points = evaluation.get("points", 0)
+    reaction = evaluation.get("reaction", "Puntos contabilizados majestuosamente.")
+
     result = await update_house_points(student_id, points, reason, teacher_name)
 
     if result:
-        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
-        dumbledore_reaction = await react_to_points(
-            student_name=result['student_name'], 
-            house=result['house'], 
-            points=points, 
-            reason=reason, 
-            teacher_name=teacher_name
-        )
-        
         await update.message.reply_text(
-            f"{dumbledore_reaction}\n\n"
+            f"{reaction}\n\n"
+            f"🏅 Puntos otorgados: {points}\n"
             f"📊 Nuevo balance de {result['house']}: {result['new_total']} puntos."
         )
     else:
-        await update.message.reply_text("Hubo un error al otorgar los puntos. Estudiante no encontrado.")
+        await update.message.reply_text("Hubo un error al guardar los puntos en los archivos del colegio.")
     
     context.user_data.clear() 
     return ConversationHandler.END
@@ -196,7 +227,7 @@ point_conv_handler = ConversationHandler(
     entry_points=[CommandHandler("point", point_start)],
     states={
         CHOOSING_STUDENT: [CallbackQueryHandler(point_student_callback)],
-        TYPING_POINTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, point_amount)],
+        CHOOSING_SCALE: [CallbackQueryHandler(point_scale_callback)],
         TYPING_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, point_reason)],
     },
     fallbacks=[CommandHandler("cancel", cancel_command)],

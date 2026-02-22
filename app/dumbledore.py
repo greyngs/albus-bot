@@ -1,4 +1,5 @@
 import os
+import json
 from google import genai
 from google.genai import types
 
@@ -42,29 +43,41 @@ async def speak_like_dumbledore(user_message: str, telegram_id: int, name: str, 
         print(f"❌ Error conectando a Gemini: {e}")
         return "Parece que los duendecillos de Cornualles han interferido con mi red flu. Intenta de nuevo más tarde."
 
-async def react_to_points(student_name: str, house: str, points: int, reason: str, teacher_name: str) -> str:
-    action = "otorgado" if points > 0 else "quitado"
-    abs_points = abs(points)
+async def evaluate_and_react(student_name: str, house: str, scale: str, reason: str, teacher_name: str) -> dict:
+    scale_rules = {
+        "buena_normal": "Otorga entre 5 y 10 puntos a su favor.",
+        "buena_extraordinaria": "Otorga entre 11 y 30 puntos a su favor.",
+        "buena_epica": "Otorga entre 31 y 50 puntos a su favor.",
+        "mala_normal": "Quita entre 1 y 10 puntos (escribiendo el número en negativo, ej. -5).",
+        "mala_extraordinaria": "Quita entre 11 y 30 puntos (escribiendo el número en negativo, ej. -20).",
+        "mala_epica": "Quita entre 31 y 50 puntos (escribiendo el número en negativo, ej. -40)."
+    }
+    
+    rule = scale_rules.get(scale, "Otorga 0 puntos.")
     
     system_instruction = (
-        f"Eres Albus Dumbledore. El profesor o alumno '{teacher_name}' acaba de {action} {abs_points} puntos "
-        f"al estudiante '{student_name}' de la casa '{house}'. El motivo ha sido: '{reason}'. "
-        f"Reacciona a esta situación como el sabio director de Hogwarts. "
-        f"Si es una pérdida de puntos, muéstrate decepcionado, comprensivo o da una lección moral. "
-        f"Si es una ganancia, muéstrate orgulloso, alegre o intrigado. "
-        f"Sé conciso (máximo 300 caracteres). Nunca rompas tu personaje ni hables como un bot."
+        f"Eres Albus Dumbledore. El profesor o alumno '{teacher_name}' está reportando una acción "
+        f"del estudiante '{student_name}' de la casa '{house}'. El motivo es: '{reason}'. "
+        f"Instrucción para los puntos: {rule} "
+        f"Primero, decide la cantidad EXACTA de puntos a otorgar (o quitar) respetando estrictamente el rango de la regla según qué tan bien (o mal) haya sonado el motivo. "
+        f"Segundo, reacciona a esta situación como el sabio director de Hogwarts. "
+        f"IMPORTANTE: Tu respuesta debe ser EXCLUSIVAMENTE un objeto JSON válido con este formato exacto: "
+        f'{{"points": 10, "reaction": "tu respuesta aquí"}}'
     )
 
     try:
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents="¿Qué opinas sobre estos puntos que se acaban de dar en Hogwarts, Director?",
+            contents="Por favor, evalúa la acción basándote en el motivo, y dime cuántos puntos le corresponden y tu reacción como director, usa JSON.",
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
-                temperature=0.8,
+                temperature=0.7,
+                response_mime_type="application/json"
             )
         )
-        return response.text
+        data = json.loads(response.text)
+        return data
     except Exception as e:
-        print(f"❌ Error conectando a Gemini (Puntos): {e}")
-        return f"✨ ¡Hecho! {points} puntos contabilizados para {student_name} ({house})."
+        print(f"❌ Error conectando a Gemini (Evaluador JSON): {e}")
+        fallback_points = 5 if "buena" in scale else -5
+        return {"points": fallback_points, "reaction": f"Parece que los duendecillos interfirieron, pero he sumado {fallback_points} puntos."}
