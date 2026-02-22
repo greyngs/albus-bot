@@ -111,3 +111,42 @@ async def get_scoreboard() -> dict:
         scores[doc["house"]] = doc.get("total_points", 0)
         
     return scores
+
+async def add_cat_points(telegram_id: int, points: int, cat_type: str) -> dict:
+    students_col = db_manager.db["students"]
+    
+    await students_col.update_one(
+        {"telegram_id": telegram_id},
+        {"$inc": {"cat_points": points}}
+    )
+    
+    student = await students_col.find_one({"telegram_id": telegram_id})
+    if not student:
+        return None
+        
+    nuevo_total = student.get("cat_points", points)
+    student_name = student["name"]
+    
+    history_col = db_manager.db["cat_history"]
+    await history_col.insert_one({
+        "student_id": telegram_id,
+        "student_name": student_name,
+        "cat_type": cat_type,
+        "points": points,
+        "timestamp": datetime.now(timezone.utc)
+    })
+    
+    return {"student_name": student_name, "new_total": nuevo_total}
+
+async def get_cat_scoreboard() -> list[dict]:
+    students_col = db_manager.db["students"]
+    cursor = students_col.find({"cat_points": {"$exists": True}}).sort("cat_points", -1)
+    
+    scoreboard = []
+    async for doc in cursor:
+        scoreboard.append({
+            "name": doc["name"],
+            "points": doc["cat_points"]
+        })
+        
+    return scoreboard

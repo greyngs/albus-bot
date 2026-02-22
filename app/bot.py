@@ -4,7 +4,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 from dotenv import load_dotenv
 
 from app.dumbledore import speak_like_dumbledore, evaluate_and_react
-from app.database import get_user, register_user, update_house_points, get_scoreboard, get_all_students
+from app.database import get_user, register_user, update_house_points, get_scoreboard, get_all_students, add_cat_points, get_cat_scoreboard
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -24,6 +24,8 @@ Soy Albus Dumbledore. El Gran Comedor está listo para recibir sus méritos.
 /registro - Inscribirte en los pergaminos de Hogwarts
 /point - Agregar o quitar puntos a una casa
 /status - Ver el estado actual de puntos
+/cat - Registrar el avistamiento de un Gato 🐈
+/cat_status - Ver la liga de Cazadores de Gatos 🐱
     """
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
@@ -210,6 +212,71 @@ async def point_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear() 
     return ConversationHandler.END
 
+async def cat_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    scores = await get_cat_scoreboard()
+    if not scores:
+        await update.message.reply_text("Aún no se ha avistado ningún gato merodeando por el castillo 🐾")
+        return
+        
+    board_text = "🐱 **Liga de Cazadores de Gatos** 🐱\n\n"
+    
+    medals = ["🥇", "🥈", "🥉"]
+    for i, score in enumerate(scores):
+        medal = medals[i] if i < len(medals) else "🐈"
+        board_text += f"{medal} {score['name']}: {score['points']} pts\n"
+        
+    await update.message.reply_text(board_text, parse_mode="Markdown")
+
+async def cat_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("🐈 Normal (2 pts)", callback_data="cat_normal")],
+        [InlineKeyboardButton("😼 Especial/Peculiar (4 pts)", callback_data="cat_especial")],
+        [InlineKeyboardButton("🔭 Remoto (1 pt)", callback_data="cat_remoto")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "🐾 ¡Avistamiento gatuno!\n¿Qué tipo de gato encontraste?",
+        reply_markup=reply_markup
+    )
+
+async def cat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    telegram_id = query.from_user.id
+    cat_type = query.data
+    
+    points_map = {
+        "cat_normal": {"pts": 2, "label": "Gato Normal"},
+        "cat_especial": {"pts": 4, "label": "Gato Especial"},
+        "cat_remoto": {"pts": 1, "label": "Gato Remoto"}
+    }
+    
+    details = points_map.get(cat_type)
+    if not details:
+        return
+        
+    result = await add_cat_points(telegram_id, details["pts"], details["label"])
+    
+    if result:
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
+        student = await get_user(telegram_id)
+        name = student["name"] if student else "Alguien"
+        
+        prompt = f"El estudiante {name} acaba de encontrar un {details['label']} y ha ganado {details['pts']} puntos en el juego de avistamiento de gatos. Di una frase muy corta y mágica felicitándolo por su habilidad de observación de criaturas mágicas. Reacciona alegre u orgulloso."
+        
+        dumbledore_reaction = await speak_like_dumbledore(prompt, telegram_id, name, "Hogwarts", "Cazador de Gatos")
+        
+        await query.edit_message_text(
+            f"{dumbledore_reaction}\n\n"
+            f"🐈 **{details['label']} registrado (+{details['pts']} pts)**\n"
+            f"📊 Puntos gatunos actuales: {result['new_total']}"
+        )
+    else:
+        await query.edit_message_text("No estás registrado en Hogwarts para sumar puntos de gato.")
+
+
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Encantamiento cancelado. Los relojes de arena permanecen intactos.", 
@@ -222,6 +289,8 @@ telegram_app.add_handler(CommandHandler("help", help_command))
 telegram_app.add_handler(CommandHandler("start", help_command))
 telegram_app.add_handler(CommandHandler("registro", register_command))
 telegram_app.add_handler(CommandHandler("status", status_command)) 
+telegram_app.add_handler(CommandHandler("cat", cat_start)) 
+telegram_app.add_handler(CommandHandler("cat_status", cat_status_command)) 
 
 point_conv_handler = ConversationHandler(
     entry_points=[CommandHandler("point", point_start)],
@@ -234,6 +303,7 @@ point_conv_handler = ConversationHandler(
 )
 
 telegram_app.add_handler(point_conv_handler) 
+telegram_app.add_handler(CallbackQueryHandler(cat_callback, pattern='^cat_'))
 telegram_app.add_handler(MessageHandler(
     filters.TEXT & ~filters.COMMAND & (filters.ChatType.PRIVATE | filters.Entity("mention")), 
     handle_message
