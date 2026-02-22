@@ -25,7 +25,7 @@ Soy Albus Dumbledore. El Gran Comedor está listo para recibir sus méritos.
 /point - Agregar o quitar puntos a una casa
 /status - Ver el estado actual de puntos
 /cat - Registrar el avistamiento de un Gato 🐈
-/cat_status - Ver la liga de Cazadores de Gatos 🐱
+/catstatus - Ver la liga de Cazadores de Gatos 🐱
     """
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
@@ -212,7 +212,7 @@ async def point_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear() 
     return ConversationHandler.END
 
-async def cat_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def catstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     scores = await get_cat_scoreboard()
     if not scores:
         await update.message.reply_text("Aún no se ha avistado ningún gato merodeando por el castillo 🐾")
@@ -290,7 +290,7 @@ telegram_app.add_handler(CommandHandler("start", help_command))
 telegram_app.add_handler(CommandHandler("registro", register_command))
 telegram_app.add_handler(CommandHandler("status", status_command)) 
 telegram_app.add_handler(CommandHandler("cat", cat_start)) 
-telegram_app.add_handler(CommandHandler("cat_status", cat_status_command)) 
+telegram_app.add_handler(CommandHandler("catstatus", catstatus_command)) 
 
 point_conv_handler = ConversationHandler(
     entry_points=[CommandHandler("point", point_start)],
