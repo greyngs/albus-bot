@@ -70,33 +70,65 @@ async def setgroup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await set_announcement_group(chat_id)
     await update.message.reply_text(f"✨ ¡Hecho! Este chat (ID: {chat_id}) ha sido designado como el Gran Comedor. Albus vendrá aquí a dar sus discursos a fin de mes.")
 
-async def start_ceremony_check(context: ContextTypes.DEFAULT_TYPE):
-    now = datetime.now(BOT_TZ)
-    if now.day == 1:
-        chat_id = await get_announcement_group()
-        if not chat_id:
-            print("❌ No hay Gran Comedor (grupo) configurado para la ceremonia mensual.")
-            return
+async def run_ceremony(context: ContextTypes.DEFAULT_TYPE):
+    chat_id = await get_announcement_group()
+    if not chat_id:
+        print("❌ No hay Gran Comedor (grupo) configurado para la ceremonia mensual.")
+        return False
 
-        meses_es = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-        prev_month_date = now - timedelta(days=2)
-        prev_month_name = meses_es[prev_month_date.month]
+    now = datetime.now(BOT_TZ)
+    meses_es = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    
+    # Calcular el mes anterior para el anuncio
+    # Si estamos en los primeros días del mes (ej. día 1), restamos unos días para caer en el mes anterior
+    if now.day <= 5:
+        prev_month_date = now - timedelta(days=now.day + 1)
+    else:
+        # Si se gatilla a mediados de mes (manual), igual calculamos el mes exacto anterior
+        prev_month_date = now - timedelta(days=now.day + 1)
         
-        winners = await get_previous_month_winners()
-        w_house = winners["house"]["name"]
-        w_h_points = winners["house"]["points"]
-        w_cat = winners["cat_hunter"]["name"]
-        w_c_points = winners["cat_hunter"]["points"]
+    prev_month_name = meses_es[prev_month_date.month]
+    
+    winners = await get_previous_month_winners()
+    w_house = winners["house"]["name"]
+    w_h_points = winners["house"]["points"]
+    w_cat = winners["cat_hunter"]["name"]
+    w_c_points = winners["cat_hunter"]["points"]
+    
+    speech = await generate_monthly_speech(
+        winner_house=w_house, 
+        house_pts=w_h_points, 
+        winner_cat=w_cat, 
+        cat_pts=w_c_points, 
+        month_name=prev_month_name
+    )
+    
+    await context.bot.send_message(chat_id=chat_id, text=speech)
+    return True
+
+async def start_ceremony_check(context: ContextTypes.DEFAULT_TYPE):
+    # La validación letal se delega a JobQueue, pero mantenemos log
+    print("⏳ Iniciando ceremonia mensual automática...")
+    await run_ceremony(context)
+
+async def manual_ceremony_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    if not args or args[0] != SECRET_PASSWORD:
+        # Comando silencioso si alguien intenta adivinarlo sin éxito
+        return
         
-        speech = await generate_monthly_speech(
-            winner_house=w_house, 
-            house_pts=w_h_points, 
-            winner_cat=w_cat, 
-            cat_pts=w_c_points, 
-            month_name=prev_month_name
-        )
+    chat_id = await get_announcement_group()
+    if not chat_id:
+        await update.message.reply_text("❌ No hay Gran Comedor configurado. Usa /setgroup en el grupo de destino primero.")
+        return
         
-        await context.bot.send_message(chat_id=chat_id, text=speech)
+    await update.message.reply_text("✨ Ejecutando la ceremonia secretamente. El mensaje se está enviando al grupo configurado...")
+    success = await run_ceremony(context)
+    if success:
+        await update.message.reply_text("✅ La ceremonia en el Gran Comedor concluyó con éxito.")
+    else:
+        await update.message.reply_text("❌ Ocurrió un error mágico al intentar dar el discurso.")
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.message.from_user.id
@@ -339,6 +371,7 @@ telegram_app.add_handler(CommandHandler("status", status_command))
 telegram_app.add_handler(CommandHandler("cat", cat_start)) 
 telegram_app.add_handler(CommandHandler("catstatus", catstatus_command))
 telegram_app.add_handler(CommandHandler("setgroup", setgroup_command))
+telegram_app.add_handler(CommandHandler("ceremony", manual_ceremony_command))
 
 point_conv_handler = ConversationHandler(
     entry_points=[CommandHandler("point", point_start)],
@@ -358,9 +391,13 @@ telegram_app.add_handler(MessageHandler(
 ))
 
 async def init_bot():
-    t = time(hour=0, minute=0, second=1, tzinfo=BOT_TZ)
-    telegram_app.job_queue.run_daily(start_ceremony_check, time=t)
-    
+    t = time(hour=9, minute=0, second=0, tzinfo=BOT_TZ)
+    # Reemplazamos run_daily por run_monthly (más robusto evitando la condicional now.day)
+    try:
+        telegram_app.job_queue.run_monthly(start_ceremony_check, when=t, day=1)
+    except AttributeError:
+        # Fallback pre-v20 o PTB sin run_monthly disponible en la versión específica
+        telegram_app.job_queue.run_daily(start_ceremony_check, time=t)
     await telegram_app.initialize()
     await telegram_app.start()
     
