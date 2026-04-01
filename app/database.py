@@ -18,21 +18,21 @@ class Database:
 db_manager = Database()
 
 async def connect_to_mongo():
-    print("🪄 Conectando a la bóveda...")
+    print("🪄 Connecting to the vault...")
     db_manager.client = AsyncIOMotorClient(MONGO_URI)
     db_manager.db = db_manager.client[DB_NAME]
     
     try:
         await db_manager.client.admin.command('ping')
-        print("✅ Conexión exitosa a la base de datos de Hogwarts.")
+        print("✅ Successfully connected to Hogwarts database.")
     except Exception as e:
-        print(f"❌ Error conectando a MongoDB: {e}")
+        print(f"❌ Error connecting to MongoDB: {e}")
 
 async def close_mongo_connection():
-    print("Cerrando conexión a MongoDB...")
+    print("Closing connection to MongoDB...")
     if db_manager.client:
         db_manager.client.close()
-        print("🔒 Conexión cerrada.")
+        print("🔒 Connection closed.")
 
 async def get_user(telegram_id: int) -> Optional[dict]:
     collection = db_manager.db["students"] 

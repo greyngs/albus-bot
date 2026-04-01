@@ -73,21 +73,21 @@ async def setgroup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def run_ceremony(context: ContextTypes.DEFAULT_TYPE):
     chat_id = await get_announcement_group()
     if not chat_id:
-        print("❌ No hay Gran Comedor (grupo) configurado para la ceremonia mensual.")
+        print("❌ No Great Hall (group) configured for the monthly ceremony.")
         return False
 
     now = datetime.now(BOT_TZ)
-    meses_es = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    spanish_months = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     
-    # Calcular el mes anterior para el anuncio
-    # Si estamos en los primeros días del mes (ej. día 1), restamos unos días para caer en el mes anterior
+    # Calculate previous month for the announcement
+    # If triggered on early days of the month (e.g. 1st), rewind a few days to fall on the previous month
     if now.day <= 5:
         prev_month_date = now - timedelta(days=now.day + 1)
     else:
-        # Si se gatilla a mediados de mes (manual), igual calculamos el mes exacto anterior
+        # If triggered mid-month manually, we still calculate the exact previous month
         prev_month_date = now - timedelta(days=now.day + 1)
         
-    prev_month_name = meses_es[prev_month_date.month]
+    prev_month_name = spanish_months[prev_month_date.month]
     
     winners = await get_previous_month_winners()
     w_house = winners["house"]["name"]
@@ -103,18 +103,22 @@ async def run_ceremony(context: ContextTypes.DEFAULT_TYPE):
         month_name=prev_month_name
     )
     
+    # Final safety layer against Telegram limits, tailored to explicitly match the new 1000 char rule
+    if len(speech) > 1000:
+        speech = speech[:1000] + "... (El eco místico del Gran Comedor disipó el resto del discurso)."
+        
     await context.bot.send_message(chat_id=chat_id, text=speech)
     return True
 
 async def start_ceremony_check(context: ContextTypes.DEFAULT_TYPE):
-    # La validación letal se delega a JobQueue, pero mantenemos log
-    print("⏳ Iniciando ceremonia mensual automática...")
+    # The exact day validation is safely delegated to JobQueue now, we just keep the log
+    print("⏳ Starting automated monthly ceremony...")
     await run_ceremony(context)
 
 async def manual_ceremony_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if not args or args[0] != SECRET_PASSWORD:
-        # Comando silencioso si alguien intenta adivinarlo sin éxito
+        # Silent fail if someone tries to guess the command
         return
         
     chat_id = await get_announcement_group()
@@ -156,10 +160,10 @@ CHOOSING_STUDENT, CHOOSING_SCALE, TYPING_REASON = range(3)
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     scores = await get_scoreboard()
-    meses_es = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-    mes_actual = meses_es[datetime.now(BOT_TZ).month]
+    spanish_months = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    current_month = spanish_months[datetime.now(BOT_TZ).month]
     
-    board_text = f"🏆 **Copa de las Casas - {mes_actual}** 🏆\n\n"
+    board_text = f"🏆 **Copa de las Casas - {current_month}** 🏆\n\n"
     
     house_emojis = {"Gryffindor": "🦁", "Hufflepuff": "🦡", "Ravenclaw": "🦅", "Slytherin": "🐍"}
     
@@ -177,13 +181,13 @@ async def point_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     keyboard = []
-    # Crear filas de botones con 2 estudiantes por fila si es posible
+    # Create rows of 2 students per row for layout aesthetics
     for i in range(0, len(students), 2):
         row = []
         for student in students[i:i+2]:
             house_emoji = {"Gryffindor": "🦁", "Hufflepuff": "🦡", "Ravenclaw": "🦅", "Slytherin": "🐍"}.get(student['house'], "✨")
             button_text = f"{house_emoji} {student['name']}"
-            # Convertir id a string para callback_data
+            # Convert ID to string for callback_data
             row.append(InlineKeyboardButton(button_text, callback_data=str(student['telegram_id'])))
         keyboard.append(row)
 
@@ -207,12 +211,12 @@ async def point_student_callback(update: Update, context: ContextTypes.DEFAULT_T
     student_name = next((s["name"] for s in students if s["telegram_id"] == student_id), "Estudiante Desconocido")
     
     keyboard = [
-        [InlineKeyboardButton("🟢 Buena - Normal (5 a 10)", callback_data="buena_normal")],
-        [InlineKeyboardButton("🌟 Buena - Extraordinaria (11 a 30)", callback_data="buena_extraordinaria")],
-        [InlineKeyboardButton("🔥 Buena - Épica (31+)", callback_data="buena_epica")],
-        [InlineKeyboardButton("🔴 Mala - Normal (-1 a -10)", callback_data="mala_normal")],
-        [InlineKeyboardButton("⚠️ Mala - Extraordinaria (-11 a -30)", callback_data="mala_extraordinaria")],
-        [InlineKeyboardButton("💥 Mala - Épica (-31+)", callback_data="mala_epica")]
+        [InlineKeyboardButton("🟢 Buena - Normal (5 a 10)", callback_data="good_normal")],
+        [InlineKeyboardButton("🌟 Buena - Extraordinaria (11 a 30)", callback_data="good_extraordinary")],
+        [InlineKeyboardButton("🔥 Buena - Épica (31+)", callback_data="good_epic")],
+        [InlineKeyboardButton("🔴 Mala - Normal (-1 a -10)", callback_data="bad_normal")],
+        [InlineKeyboardButton("⚠️ Mala - Extraordinaria (-11 a -30)", callback_data="bad_extraordinary")],
+        [InlineKeyboardButton("💥 Mala - Épica (-31+)", callback_data="bad_epic")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -230,12 +234,12 @@ async def point_scale_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["scale"] = scale
     
     scale_names = {
-        "buena_normal": "Buena (Normal)",
-        "buena_extraordinaria": "Buena (Extraordinaria)",
-        "buena_epica": "Buena (Épica)",
-        "mala_normal": "Mala (Normal)",
-        "mala_extraordinaria": "Mala (Extraordinaria)",
-        "mala_epica": "Mala (Épica)"
+        "good_normal": "Buena (Normal)",
+        "good_extraordinary": "Buena (Extraordinaria)",
+        "good_epic": "Buena (Épica)",
+        "bad_normal": "Mala (Normal)",
+        "bad_extraordinary": "Mala (Extraordinaria)",
+        "bad_epic": "Mala (Épica)"
     }
     
     await query.edit_message_text(
@@ -294,10 +298,10 @@ async def catstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Aún no se ha avistado ningún gato merodeando por el castillo 🐾")
         return
         
-    meses_es = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-    mes_actual = meses_es[datetime.now(BOT_TZ).month]
+    spanish_months = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    current_month = spanish_months[datetime.now(BOT_TZ).month]
         
-    board_text = f"🐱 **Liga de Cazadores de Gatos - {mes_actual}** 🐱\n\n"
+    board_text = f"🐱 **Liga de Cazadores de Gatos - {current_month}** 🐱\n\n"
     
     medals = ["🥇", "🥈", "🥉"]
     for i, score in enumerate(scores):
@@ -309,8 +313,8 @@ async def catstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cat_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🐈 Normal (2 pts)", callback_data="cat_normal")],
-        [InlineKeyboardButton("😼 Especial/Peculiar (4 pts)", callback_data="cat_especial")],
-        [InlineKeyboardButton("🔭 Remoto (1 pt)", callback_data="cat_remoto")]
+        [InlineKeyboardButton("😼 Especial/Peculiar (4 pts)", callback_data="cat_special")],
+        [InlineKeyboardButton("🔭 Remoto (1 pt)", callback_data="cat_remote")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -328,8 +332,8 @@ async def cat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     points_map = {
         "cat_normal": {"pts": 2, "label": "Gato Normal"},
-        "cat_especial": {"pts": 4, "label": "Gato Especial"},
-        "cat_remoto": {"pts": 1, "label": "Gato Remoto"}
+        "cat_special": {"pts": 4, "label": "Gato Especial"},
+        "cat_remote": {"pts": 1, "label": "Gato Remoto"}
     }
     
     details = points_map.get(cat_type)
@@ -402,10 +406,10 @@ async def init_bot():
     await telegram_app.start()
     
     if WEBHOOK_URL:
-        print(f"🔗 Configurando Webhook en: {WEBHOOK_URL}")
+        print(f"🔗 Configuring Webhook at: {WEBHOOK_URL}")
         await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
     else:
-        print("🔄 Iniciando bot en modo Polling (Local)...")
+        print("🔄 Starting bot in Polling (Local) mode...")
         await telegram_app.updater.start_polling()
 
 async def stop_bot():

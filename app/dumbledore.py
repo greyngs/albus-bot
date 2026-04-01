@@ -5,7 +5,7 @@ from google.genai import types
 
 client = genai.Client()
 
-# Diccionario en memoria para guardar las sesiones de chat por usuario
+# In-memory dictionary to store chat sessions per user
 user_chats = {}
 
 async def speak_like_dumbledore(user_message: str, telegram_id: int, name: str, house: str, profession: str) -> str:
@@ -40,17 +40,17 @@ async def speak_like_dumbledore(user_message: str, telegram_id: int, name: str, 
         response = chat.send_message(user_message)
         return response.text
     except Exception as e:
-        print(f"❌ Error conectando a Gemini: {e}")
+        print(f"❌ Error connecting to Gemini: {e}")
         return "Parece que los duendecillos de Cornualles han interferido con mi red flu. Intenta de nuevo más tarde."
 
 async def evaluate_and_react(student_name: str, house: str, scale: str, reason: str, teacher_name: str) -> dict:
     scale_rules = {
-        "buena_normal": "Otorga entre 5 y 10 puntos a su favor.",
-        "buena_extraordinaria": "Otorga entre 11 y 30 puntos a su favor.",
-        "buena_epica": "Otorga entre 31 y 50 puntos a su favor.",
-        "mala_normal": "Quita entre 1 y 10 puntos (escribiendo el número en negativo, ej. -5).",
-        "mala_extraordinaria": "Quita entre 11 y 30 puntos (escribiendo el número en negativo, ej. -20).",
-        "mala_epica": "Quita entre 31 y 50 puntos (escribiendo el número en negativo, ej. -40)."
+        "good_normal": "Otorga entre 5 y 10 puntos a su favor.",
+        "good_extraordinary": "Otorga entre 11 y 30 puntos a su favor.",
+        "good_epic": "Otorga entre 31 y 50 puntos a su favor.",
+        "bad_normal": "Quita entre 1 y 10 puntos (escribiendo el número en negativo, ej. -5).",
+        "bad_extraordinary": "Quita entre 11 y 30 puntos (escribiendo el número en negativo, ej. -20).",
+        "bad_epic": "Quita entre 31 y 50 puntos (escribiendo el número en negativo, ej. -40)."
     }
     
     rule = scale_rules.get(scale, "Otorga 0 puntos.")
@@ -78,8 +78,8 @@ async def evaluate_and_react(student_name: str, house: str, scale: str, reason: 
         data = json.loads(response.text)
         return data
     except Exception as e:
-        print(f"❌ Error conectando a Gemini (Evaluador JSON): {e}")
-        fallback_points = 5 if "buena" in scale else -5
+        print(f"❌ Error connecting to Gemini (JSON Evaluator): {e}")
+        fallback_points = 5 if "good" in scale else -5
         return {"points": fallback_points, "reaction": f"Parece que los duendecillos interfirieron, pero he sumado {fallback_points} puntos."}
 
 async def generate_monthly_speech(winner_house: str, house_pts: int, winner_cat: str, cat_pts: int, month_name: str) -> str:
@@ -89,7 +89,8 @@ async def generate_monthly_speech(winner_house: str, house_pts: int, winner_cat:
         f"La casa ganadora fue {winner_house} con {house_pts} puntos. "
         f"El estudiante con mejor visión de criaturas (Cazador de Gatos) fue {winner_cat} con {cat_pts} puntos. "
         f"Inspira a los estudiantes para el nuevo mes, sé solemne, mágico, festivo pero con tu humor característico pacífico. "
-        f"¡No rompas el personaje! Haz que todos se sientan en Hogwarts."
+        f"¡No rompas el personaje! Haz que todos se sientan en Hogwarts. "
+        f"IMPORTANTE: Tu discurso debe ser conciso y no superar los 1000 caracteres."
     )
     
     try:
@@ -103,5 +104,5 @@ async def generate_monthly_speech(winner_house: str, house_pts: int, winner_cat:
         )
         return response.text
     except Exception as e:
-        print(f"❌ Error conectando a Gemini (Discurso Mensual): {e}")
+        print(f"❌ Error connecting to Gemini (Monthly Speech): {e}")
         return f"Ajem... Parecen haber problemas con el vociferador mágico. Sin embargo, quiero felicitar a {winner_house} y a nuestro cazador {winner_cat} por su victoria en el mes de {month_name}. ¡Que comience el banquete!"
