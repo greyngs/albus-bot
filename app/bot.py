@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler
 from dotenv import load_dotenv
@@ -11,6 +11,8 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SECRET_PASSWORD = os.getenv("SECRET_PASSWORD") 
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+
+BOT_TZ = timezone(timedelta(hours=-5))
 
 telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -85,7 +87,7 @@ CHOOSING_STUDENT, CHOOSING_SCALE, TYPING_REASON = range(3)
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     scores = await get_scoreboard()
     meses_es = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-    mes_actual = meses_es[datetime.now().month]
+    mes_actual = meses_es[datetime.now(BOT_TZ).month]
     
     board_text = f"🏆 **Copa de las Casas - {mes_actual}** 🏆\n\n"
     
@@ -223,7 +225,7 @@ async def catstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     meses_es = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-    mes_actual = meses_es[datetime.now().month]
+    mes_actual = meses_es[datetime.now(BOT_TZ).month]
         
     board_text = f"🐱 **Liga de Cazadores de Gatos - {mes_actual}** 🐱\n\n"
     

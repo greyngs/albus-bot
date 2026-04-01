@@ -2,7 +2,9 @@ import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+BOT_TZ = timezone(timedelta(hours=-5))
 
 load_dotenv()
 
@@ -96,8 +98,8 @@ async def update_house_points(student_id: int, points: int, reason: str, teacher
     })
     
     # Calculate monthly total to show properly in the chat
-    now = datetime.now(timezone.utc)
-    start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    now = datetime.now(BOT_TZ)
+    start_of_month = datetime(now.year, now.month, 1, tzinfo=BOT_TZ)
     pipeline = [
         {"$match": {"house": house, "timestamp": {"$gte": start_of_month}}},
         {"$group": {"_id": "$house", "monthly_total": {"$sum": "$points"}}}
@@ -111,8 +113,8 @@ async def update_house_points(student_id: int, points: int, reason: str, teacher
 async def get_scoreboard() -> dict:
     history_col = db_manager.db["points_history"]
     
-    now = datetime.now(timezone.utc)
-    start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    now = datetime.now(BOT_TZ)
+    start_of_month = datetime(now.year, now.month, 1, tzinfo=BOT_TZ)
     
     pipeline = [
         {"$match": {"timestamp": {"$gte": start_of_month}}},
@@ -151,8 +153,8 @@ async def add_cat_points(telegram_id: int, points: int, cat_type: str) -> dict:
         "timestamp": datetime.now(timezone.utc)
     })
     
-    now = datetime.now(timezone.utc)
-    start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    now = datetime.now(BOT_TZ)
+    start_of_month = datetime(now.year, now.month, 1, tzinfo=BOT_TZ)
     pipeline = [
         {"$match": {"student_id": telegram_id, "timestamp": {"$gte": start_of_month}}},
         {"$group": {"_id": "$student_id", "monthly_total": {"$sum": "$points"}}}
@@ -165,8 +167,8 @@ async def add_cat_points(telegram_id: int, points: int, cat_type: str) -> dict:
 
 async def get_cat_scoreboard() -> list[dict]:
     history_col = db_manager.db["cat_history"]
-    now = datetime.now(timezone.utc)
-    start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    now = datetime.now(BOT_TZ)
+    start_of_month = datetime(now.year, now.month, 1, tzinfo=BOT_TZ)
     
     pipeline = [
         {"$match": {"timestamp": {"$gte": start_of_month}}},
