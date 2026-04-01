@@ -83,10 +83,6 @@ async def update_house_points(student_id: int, points: int, reason: str, teacher
         {"$inc": {"total_points": points}},
         upsert=True
     )
-    
-    updated_house = await houses_col.find_one({"house": house})
-    nuevo_total = updated_house["total_points"]
-    
     # 3. Add History Record
     history_col = db_manager.db["points_history"]
     await history_col.insert_one({
@@ -99,17 +95,37 @@ async def update_house_points(student_id: int, points: int, reason: str, teacher
         "timestamp": datetime.now(timezone.utc)
     })
     
-    return {"house": house, "new_total": nuevo_total, "student_name": student_name}
+    # Calculate monthly total to show properly in the chat
+    now = datetime.now(timezone.utc)
+    start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    pipeline = [
+        {"$match": {"house": house, "timestamp": {"$gte": start_of_month}}},
+        {"$group": {"_id": "$house", "monthly_total": {"$sum": "$points"}}}
+    ]
+    cursor = history_col.aggregate(pipeline)
+    result = await cursor.to_list(length=1)
+    monthly_total = result[0]["monthly_total"] if result else 0
+    
+    return {"house": house, "new_total": monthly_total, "student_name": student_name}
 
 async def get_scoreboard() -> dict:
-    houses_col = db_manager.db["houses"]
-    cursor = houses_col.find({})
+    history_col = db_manager.db["points_history"]
+    
+    now = datetime.now(timezone.utc)
+    start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    
+    pipeline = [
+        {"$match": {"timestamp": {"$gte": start_of_month}}},
+        {"$group": {"_id": "$house", "monthly_total": {"$sum": "$points"}}}
+    ]
     
     scores = {"Gryffindor": 0, "Hufflepuff": 0, "Ravenclaw": 0, "Slytherin": 0}
+    cursor = history_col.aggregate(pipeline)
     
     async for doc in cursor:
-        scores[doc["house"]] = doc.get("total_points", 0)
-        
+        if doc["_id"] in scores:
+            scores[doc["_id"]] = doc["monthly_total"]
+            
     return scores
 
 async def add_cat_points(telegram_id: int, points: int, cat_type: str) -> dict:
@@ -124,7 +140,6 @@ async def add_cat_points(telegram_id: int, points: int, cat_type: str) -> dict:
     if not student:
         return None
         
-    nuevo_total = student.get("cat_points", points)
     student_name = student["name"]
     
     history_col = db_manager.db["cat_history"]
@@ -136,17 +151,40 @@ async def add_cat_points(telegram_id: int, points: int, cat_type: str) -> dict:
         "timestamp": datetime.now(timezone.utc)
     })
     
-    return {"student_name": student_name, "new_total": nuevo_total}
+    now = datetime.now(timezone.utc)
+    start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    pipeline = [
+        {"$match": {"student_id": telegram_id, "timestamp": {"$gte": start_of_month}}},
+        {"$group": {"_id": "$student_id", "monthly_total": {"$sum": "$points"}}}
+    ]
+    cursor = history_col.aggregate(pipeline)
+    result = await cursor.to_list(length=1)
+    monthly_total = result[0]["monthly_total"] if result else 0
+    
+    return {"student_name": student_name, "new_total": monthly_total}
 
 async def get_cat_scoreboard() -> list[dict]:
-    students_col = db_manager.db["students"]
-    cursor = students_col.find({"cat_points": {"$exists": True}}).sort("cat_points", -1)
+    history_col = db_manager.db["cat_history"]
+    now = datetime.now(timezone.utc)
+    start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    
+    pipeline = [
+        {"$match": {"timestamp": {"$gte": start_of_month}}},
+        {"$group": {
+            "_id": "$student_id",
+            "name": {"$first": "$student_name"},
+            "monthly_total": {"$sum": "$points"}
+        }},
+        {"$sort": {"monthly_total": -1}}
+    ]
+    
+    cursor = history_col.aggregate(pipeline)
     
     scoreboard = []
     async for doc in cursor:
         scoreboard.append({
             "name": doc["name"],
-            "points": doc["cat_points"]
+            "points": doc["monthly_total"]
         })
         
     return scoreboard

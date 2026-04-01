@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler
 from dotenv import load_dotenv
@@ -83,7 +84,10 @@ CHOOSING_STUDENT, CHOOSING_SCALE, TYPING_REASON = range(3)
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     scores = await get_scoreboard()
-    board_text = "🏆 **Copa de las Casas - Marcador Actual** 🏆\n\n"
+    meses_es = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    mes_actual = meses_es[datetime.now().month]
+    
+    board_text = f"🏆 **Copa de las Casas - {mes_actual}** 🏆\n\n"
     
     house_emojis = {"Gryffindor": "🦁", "Hufflepuff": "🦡", "Ravenclaw": "🦅", "Slytherin": "🐍"}
     
@@ -218,7 +222,10 @@ async def catstatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Aún no se ha avistado ningún gato merodeando por el castillo 🐾")
         return
         
-    board_text = "🐱 **Liga de Cazadores de Gatos** 🐱\n\n"
+    meses_es = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    mes_actual = meses_es[datetime.now().month]
+        
+    board_text = f"🐱 **Liga de Cazadores de Gatos - {mes_actual}** 🐱\n\n"
     
     medals = ["🥇", "🥈", "🥉"]
     for i, score in enumerate(scores):
