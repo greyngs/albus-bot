@@ -1,11 +1,11 @@
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes, ConversationHandler
 from dotenv import load_dotenv
 
-from app.dumbledore import speak_like_dumbledore, evaluate_and_react
-from app.database import get_user, register_user, update_house_points, get_scoreboard, get_all_students, add_cat_points, get_cat_scoreboard
+from app.dumbledore import speak_like_dumbledore, evaluate_and_react, generate_monthly_speech
+from app.database import get_user, register_user, update_house_points, get_scoreboard, get_all_students, add_cat_points, get_cat_scoreboard, set_announcement_group, get_announcement_group, get_previous_month_winners
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -59,6 +59,44 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✨ ¡El Sombrero Seleccionador ha hablado! Bienvenido a {house}, {name}. He tomado nota de tus habilidades como {profession}.")
     else:
         await update.message.reply_text("Ya estás registrado en los pergaminos de Hogwarts.")
+
+async def setgroup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    if not args or args[0] != SECRET_PASSWORD:
+        await update.message.reply_text("🛡️ Contraseña incorrecta o faltante. Sólo el Director puede fijar el Gran Comedor.")
+        return
+        
+    chat_id = update.effective_chat.id
+    await set_announcement_group(chat_id)
+    await update.message.reply_text(f"✨ ¡Hecho! Este chat (ID: {chat_id}) ha sido designado como el Gran Comedor. Albus vendrá aquí a dar sus discursos a fin de mes.")
+
+async def start_ceremony_check(context: ContextTypes.DEFAULT_TYPE):
+    now = datetime.now(BOT_TZ)
+    if now.day == 1:
+        chat_id = await get_announcement_group()
+        if not chat_id:
+            print("❌ No hay Gran Comedor (grupo) configurado para la ceremonia mensual.")
+            return
+
+        meses_es = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        prev_month_date = now - timedelta(days=2)
+        prev_month_name = meses_es[prev_month_date.month]
+        
+        winners = await get_previous_month_winners()
+        w_house = winners["house"]["name"]
+        w_h_points = winners["house"]["points"]
+        w_cat = winners["cat_hunter"]["name"]
+        w_c_points = winners["cat_hunter"]["points"]
+        
+        speech = await generate_monthly_speech(
+            winner_house=w_house, 
+            house_pts=w_h_points, 
+            winner_cat=w_cat, 
+            cat_pts=w_c_points, 
+            month_name=prev_month_name
+        )
+        
+        await context.bot.send_message(chat_id=chat_id, text=speech)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.message.from_user.id
@@ -299,7 +337,8 @@ telegram_app.add_handler(CommandHandler("start", help_command))
 telegram_app.add_handler(CommandHandler("registro", register_command))
 telegram_app.add_handler(CommandHandler("status", status_command)) 
 telegram_app.add_handler(CommandHandler("cat", cat_start)) 
-telegram_app.add_handler(CommandHandler("catstatus", catstatus_command)) 
+telegram_app.add_handler(CommandHandler("catstatus", catstatus_command))
+telegram_app.add_handler(CommandHandler("setgroup", setgroup_command))
 
 point_conv_handler = ConversationHandler(
     entry_points=[CommandHandler("point", point_start)],
@@ -319,6 +358,9 @@ telegram_app.add_handler(MessageHandler(
 ))
 
 async def init_bot():
+    t = time(hour=0, minute=0, second=1, tzinfo=BOT_TZ)
+    telegram_app.job_queue.run_daily(start_ceremony_check, time=t)
+    
     await telegram_app.initialize()
     await telegram_app.start()
     

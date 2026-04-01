@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-python-telegram-bot
+python-telegram-bot[job-queue]
 motor
 google-genai
 python-dotenv

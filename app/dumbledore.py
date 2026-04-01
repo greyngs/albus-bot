@@ -81,3 +81,27 @@ async def evaluate_and_react(student_name: str, house: str, scale: str, reason: 
         print(f"❌ Error conectando a Gemini (Evaluador JSON): {e}")
         fallback_points = 5 if "buena" in scale else -5
         return {"points": fallback_points, "reaction": f"Parece que los duendecillos interfirieron, pero he sumado {fallback_points} puntos."}
+
+async def generate_monthly_speech(winner_house: str, house_pts: int, winner_cat: str, cat_pts: int, month_name: str) -> str:
+    system_instruction = (
+        f"Eres Albus Dumbledore. Estás dando un discurso ceremoniál de inicio de mes en el Gran Comedor de Hogwarts. "
+        f"Debes anunciar los resultados de la Copa de las Casas y la Liga de Cazadores de Gatos del mes de {month_name}. "
+        f"La casa ganadora fue {winner_house} con {house_pts} puntos. "
+        f"El estudiante con mejor visión de criaturas (Cazador de Gatos) fue {winner_cat} con {cat_pts} puntos. "
+        f"Inspira a los estudiantes para el nuevo mes, sé solemne, mágico, festivo pero con tu humor característico pacífico. "
+        f"¡No rompas el personaje! Haz que todos se sientan en Hogwarts."
+    )
+    
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents="Por favor, pronuncia tu discurso de fin de mes.",
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.8,
+            )
+        )
+        return response.text
+    except Exception as e:
+        print(f"❌ Error conectando a Gemini (Discurso Mensual): {e}")
+        return f"Ajem... Parecen haber problemas con el vociferador mágico. Sin embargo, quiero felicitar a {winner_house} y a nuestro cazador {winner_cat} por su victoria en el mes de {month_name}. ¡Que comience el banquete!"

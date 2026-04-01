@@ -190,3 +190,60 @@ async def get_cat_scoreboard() -> list[dict]:
         })
         
     return scoreboard
+
+async def set_announcement_group(chat_id: int):
+    config_col = db_manager.db["config"]
+    await config_col.update_one(
+        {"key": "announcement_group"},
+        {"$set": {"chat_id": chat_id}},
+        upsert=True
+    )
+
+async def get_announcement_group() -> Optional[int]:
+    config_col = db_manager.db["config"]
+    config = await config_col.find_one({"key": "announcement_group"})
+    if config:
+        return config.get("chat_id")
+    return None
+
+async def get_previous_month_winners() -> dict:
+    now = datetime.now(BOT_TZ)
+    start_curr_month = datetime(now.year, now.month, 1, tzinfo=BOT_TZ)
+    
+    prev_month_date = start_curr_month - timedelta(days=2)
+    start_prev_month = datetime(prev_month_date.year, prev_month_date.month, 1, tzinfo=BOT_TZ)
+
+    points_history_col = db_manager.db["points_history"]
+    house_pipeline = [
+        {"$match": {"timestamp": {"$gte": start_prev_month, "$lt": start_curr_month}}},
+        {"$group": {"_id": "$house", "total_points": {"$sum": "$points"}}},
+        {"$sort": {"total_points": -1}},
+        {"$limit": 1}
+    ]
+    house_cursor = points_history_col.aggregate(house_pipeline)
+    house_result = await house_cursor.to_list(length=1)
+    
+    winner_house = house_result[0]["_id"] if house_result else "Ninguna"
+    house_points = house_result[0]["total_points"] if house_result else 0
+    
+    cat_history_col = db_manager.db["cat_history"]
+    cat_pipeline = [
+        {"$match": {"timestamp": {"$gte": start_prev_month, "$lt": start_curr_month}}},
+        {"$group": {
+            "_id": "$student_id",
+            "name": {"$first": "$student_name"},
+            "total_points": {"$sum": "$points"}
+        }},
+        {"$sort": {"total_points": -1}},
+        {"$limit": 1}
+    ]
+    cat_cursor = cat_history_col.aggregate(cat_pipeline)
+    cat_result = await cat_cursor.to_list(length=1)
+    
+    winner_cat_hunter = cat_result[0]["name"] if cat_result else "Nadie"
+    cat_points = cat_result[0]["total_points"] if cat_result else 0
+    
+    return {
+        "house": {"name": winner_house, "points": house_points},
+        "cat_hunter": {"name": winner_cat_hunter, "points": cat_points}
+    }
